@@ -9,7 +9,7 @@ app.get('/', (req, res) => {
     res.send('Hello, World! CI/CD is working! ');
 });
 
-app.get('/getRandomNumber', (req, res) => {
+app.get('/num', (req, res) => {
     const randomNumber = Math.floor(Math.random() * 100) + 1;
     res.json({ number: randomNumber });
 });
