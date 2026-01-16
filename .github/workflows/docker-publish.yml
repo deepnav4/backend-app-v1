@@ -42,3 +42,29 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # Step 5: Deploy to EC2
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Pull the latest image from DockerHub
+            docker pull deepnav/backend-app-v1:latest
+            
+            # Stop and remove the old container
+            docker stop backend-app || true
+            docker rm backend-app || true
+            
+            # Run the new container
+            docker run -d \
+              --name backend-app \
+              -p 80:3000 \
+              -e PORT=3000 \
+              --restart unless-stopped \
+              deepnav/backend-app-v1:latest
+            
+            # Show running containers
+            docker ps
