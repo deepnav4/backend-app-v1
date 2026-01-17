@@ -51,20 +51,42 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Pull the latest image from DockerHub
-            docker pull deepnav/backend-app-v1:latest
+            # Create docker-compose.yml if it doesn't exist
+            cat > docker-compose.yml << 'EOF'
+            version: '3.8'
+            services:
+              postgres:
+                image: postgres:16-alpine
+                container_name: postgres-db
+                restart: unless-stopped
+                environment:
+                  POSTGRES_USER: myuser
+                  POSTGRES_PASSWORD: mypassword
+                  POSTGRES_DB: todoapp
+                  POSTGRES_HOST_AUTH_METHOD: trust
+                volumes:
+                  - postgres-data:/var/lib/postgresql/data
+              app:
+                image: deepnav/backend-app-v1:latest
+                container_name: backend-app
+                restart: unless-stopped
+                depends_on:
+                  - postgres
+                environment:
+                  PORT: 3000
+                  DATABASE_URL: postgresql://myuser:mypassword@postgres:5432/todoapp
+                ports:
+                  - "3000:3000"
+                command: sh -c "npx prisma migrate deploy && node dist/index.js"
+            volumes:
+              postgres-data:
+            EOF
             
-            # Stop and remove the old container
-            docker stop backend-app || true
-            docker rm backend-app || true
+            # Pull latest image
+            docker-compose pull
             
-            # Run the new container
-            docker run -d \
-              --name backend-app \
-              -p 80:3000 \
-              -e PORT=3000 \
-              --restart unless-stopped \
-              deepnav/backend-app-v1:latest
+            # Start both containers
+            docker-compose up -d
             
             # Show running containers
-            docker ps
+            docker-compose ps
