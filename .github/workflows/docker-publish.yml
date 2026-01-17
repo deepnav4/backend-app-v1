@@ -83,10 +83,10 @@ jobs:
             EOF
             
             # Pull latest image
-            docker-compose pull
+            docker compose pull
             
             # Start both containers
-            docker-compose up -d
+            docker compose up -d
             
             # Show running containers
-            docker-compose ps
+            docker compose ps
