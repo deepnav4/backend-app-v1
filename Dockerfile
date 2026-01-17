@@ -30,8 +30,9 @@ COPY package*.json ./
 # Copy Prisma schema first
 COPY prisma ./prisma
 
-# Install dependencies (includes @prisma/client)
-RUN npm ci --only=production
+# Install dependencies including Prisma CLI
+RUN npm ci --only=production && \
+    npm install prisma --save-dev
 
 # Generate Prisma Client
 RUN npx prisma generate
