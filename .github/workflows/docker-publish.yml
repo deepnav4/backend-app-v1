@@ -51,42 +51,43 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Create docker-compose.yml if it doesn't exist
-            cat > docker-compose.yml << 'EOF'
-            version: '3.8'
-            services:
-              postgres:
-                image: postgres:16-alpine
-                container_name: postgres-db
-                restart: unless-stopped
-                environment:
-                  POSTGRES_USER: myuser
-                  POSTGRES_PASSWORD: mypassword
-                  POSTGRES_DB: todoapp
-                  POSTGRES_HOST_AUTH_METHOD: trust
-                volumes:
-                  - postgres-data:/var/lib/postgresql/data
-              app:
-                image: deepnav/backend-app-v1:latest
-                container_name: backend-app
-                restart: unless-stopped
-                depends_on:
-                  - postgres
-                environment:
-                  PORT: 3000
-                  DATABASE_URL: postgresql://myuser:mypassword@postgres:5432/todoapp
-                ports:
-                  - "3000:3000"
-                command: sh -c "npx prisma migrate deploy && node dist/index.js"
-            volumes:
-              postgres-data:
-            EOF
+            # Stop old containers
+            docker stop backend-app || true
+            docker rm backend-app || true
+            docker stop postgres-db || true
+            docker rm postgres-db || true
             
-            # Pull latest image
-            docker compose pull
+            # Create network if doesn't exist
+            docker network create app-network || true
             
-            # Start both containers
-            docker compose up -d
+            # Start PostgreSQL
+            docker run -d \
+              --name postgres-db \
+              --network app-network \
+              -e POSTGRES_USER=myuser \
+              -e POSTGRES_PASSWORD=mypassword \
+              -e POSTGRES_DB=todoapp \
+              -e POSTGRES_HOST_AUTH_METHOD=trust \
+              -v postgres-data:/var/lib/postgresql/data \
+              --restart unless-stopped \
+              postgres:16-alpine
+            
+            # Wait for postgres to be ready
+            sleep 10
+            
+            # Pull latest backend image
+            docker pull deepnav/backend-app-v1:latest
+            
+            # Start backend
+            docker run -d \
+              --name backend-app \
+              --network app-network \
+              -p 3000:3000 \
+              -e PORT=3000 \
+              -e DATABASE_URL=postgresql://myuser:mypassword@postgres-db:5432/todoapp \
+              --restart unless-stopped \
+              deepnav/backend-app-v1:latest \
+              sh -c "npx prisma migrate deploy && node dist/index.js"
             
             # Show running containers
-            docker compose ps
+            docker ps
