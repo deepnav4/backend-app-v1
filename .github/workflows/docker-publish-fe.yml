@@ -1,10 +1,13 @@
-name: Build and Push Docker Image
+name: Build and Push Frontend Docker Image
 
 # Trigger this workflow when code is pushed to main branch
 on:
   push:
     branches:
       - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/docker-publish-fe.yml'
 
 # Define the jobs to run
 jobs:
@@ -12,7 +15,7 @@ jobs:
     # Use Ubuntu as the runner OS
     runs-on: ubuntu-latest
 
-    steps:
+    steps: 
       # Step 1: Checkout the repository code
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,7 +32,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: deepnav/backend-app-v1
+          images: deepnav/frontend-app-v1
           tags: |
             type=raw,value=latest
             type=sha,prefix=sha-
@@ -38,7 +41,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./frontend
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -86,6 +89,15 @@ jobs:
                 ports:
                   - "3000:3000"
                 command: sh -c "npx prisma migrate deploy && node dist/index.js"
+              
+              frontend:
+                image: deepnav/frontend-app-v1:latest
+                container_name: frontend-app
+                restart: unless-stopped
+                depends_on:
+                  - app
+                ports:
+                  - "80:80"
             
             volumes:
               postgres-data:

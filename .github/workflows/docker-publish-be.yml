@@ -1,0 +1,116 @@
+name: Build and Push Docker Image
+
+# Trigger this workflow when code is pushed to main branch
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/docker-publish-be.yml'
+
+# Define the jobs to run
+jobs:
+  build-and-push:
+    # Use Ubuntu as the runner OS
+    runs-on: ubuntu-latest
+
+    steps: 
+      # Step 1: Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Login to DockerHub using secrets
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Step 3: Extract metadata for tags and labels
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: deepnav/backend-app-v1
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-
+
+      # Step 4: Build and push Docker image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # Step 5: Deploy to EC2
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Install docker-compose if not exists
+            if ! command -v docker-compose &> /dev/null; then
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
+            
+            # Create docker-compose.yml
+            cat > docker-compose.yml << 'EOF'
+            version: '3.8'
+            
+            services:
+              postgres:
+                image: postgres:16-alpine
+                container_name: postgres-db
+                restart: unless-stopped
+                environment:
+                  POSTGRES_USER: myuser
+                  POSTGRES_PASSWORD: mypassword
+                  POSTGRES_DB: todoapp
+                  POSTGRES_HOST_AUTH_METHOD: trust
+                volumes:
+                  - postgres-data:/var/lib/postgresql/data
+              
+              app:
+                image: deepnav/backend-app-v1:latest
+                container_name: backend-app
+                restart: unless-stopped
+                depends_on:
+                  - postgres
+                environment:
+                  PORT: 3000
+                  DATABASE_URL: postgresql://myuser:mypassword@postgres:5432/todoapp
+                ports:
+                  - "3000:3000"
+                command: sh -c "npx prisma migrate deploy && node dist/index.js"
+              
+              frontend:
+                image: deepnav/frontend-app-v1:latest
+                container_name: frontend-app
+                restart: unless-stopped
+                depends_on:
+                  - app
+                ports:
+                  - "80:80"
+            
+            volumes:
+              postgres-data:
+            EOF
+            
+            # Pull latest images
+            docker-compose pull
+            
+            # Stop and remove old containers
+            docker-compose down
+            
+            # Start all services
+            docker-compose up -d
+            
+            # Show running containers
+            docker-compose ps

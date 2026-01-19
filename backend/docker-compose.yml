@@ -30,5 +30,15 @@ services:
       - "3000:3000"
     command: sh -c "npx prisma migrate deploy && node dist/index.js"
 
+  # Frontend App
+  frontend:
+    image: deepnav/frontend-app-v1:latest
+    container_name: frontend-app
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+
 volumes:
   postgres-data:
